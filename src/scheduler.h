@@ -6,7 +6,7 @@
 #include "task.h"
 #include "semphr.h"
 
-/* RENK KODLARI */
+// Renk Kodları
 #define COLOR_RESET   "\033[0m"
 #define COLOR_RED     "\033[31m"
 #define COLOR_GREEN   "\033[32m"
@@ -15,44 +15,34 @@
 #define COLOR_MAGENTA "\033[35m"
 #define COLOR_CYAN    "\033[36m"
 
-/* ÖNCELİK SABİTLERİ */
-#define PRIORITY_RT     0
-#define PRIORITY_HIGH   1
-#define PRIORITY_MED    2
-#define PRIORITY_LOW    3
-#define MAX_PRIORITY    3 
-
-/* GÖREV BİLGİ YAPISI */
 typedef struct TaskInfo {
     int id;
     int arrivalTime;
-    int originalPriority;
-    int priority;
+    int priority;           // 0: RT, 1+: User (sınırsız artabilir)
     int burstTime;
     int remainingTime;
-    int waitCounter;
     int isFinished;
-    int hasStarted;
+    int hasStarted;         // İlk kez mi çalışıyor?
+    int wasRunningBefore;   // Daha önce çalıştı mı? (askıdan döndüyse "başladı" yazdırmak için)
     TaskHandle_t handle;
-    const char* color;
+    const char *color;
     struct TaskInfo* next;
 } TaskInfo;
 
-/* KUYRUK YAPISI */
 typedef struct {
     TaskInfo* head;
     TaskInfo* tail;
     int count;
 } Queue;
 
-/* GLOBAL KUYRUKLAR */
-extern Queue qRT;
-extern Queue qP1;
-extern Queue qP2;
-extern Queue qP3;
+// Global Değişkenler
+extern Queue qRT;   // Priority 0 (Real-Time)
+extern Queue qP1;   // Priority 1
+extern Queue qP2;   // Priority 2
+extern Queue qP3;   // Priority 3+ (tüm düşük öncelikler)
 
-/* FONKSİYON PROTOTİPLERİ */
 void SchedulerInit(const char* filename);
-void SchedulerTask(void* pvParameters);
+void SchedulerTask(void *pvParameters);
+void WorkerTask(void *pvParameters);
 
 #endif

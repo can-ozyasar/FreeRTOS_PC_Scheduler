@@ -7,20 +7,18 @@
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        printf("Kullanım: %s giris.txt\n", argv[0]);
+        printf("Kullanım: ./freertos_sim giris.txt\n");
         return 1;
     }
-
+    
     #ifdef _WIN32
-        system("cls");
+    system("cls");
     #else
-        system("clear");
+    system("clear");
     #endif
-
-    printf("=== FreeRTOS Simülasyonu ===\n");
     
     SchedulerInit(argv[1]);
     vTaskStartScheduler();
     
-    return 1;
+    return 0;
 }
