@@ -15,25 +15,25 @@
 #define COLOR_MAGENTA "\033[35m"
 #define COLOR_CYAN    "\033[36m"
 #define COLOR_WHITE   "\033[37m"
-
-/* Öncelik Seviyeleri */
-#define PRIORITY_RT     0   /* Gerçek Zamanlı - FCFS */
-#define PRIORITY_HIGH   1   /* Kullanıcı Yüksek */
-#define PRIORITY_MED    2   /* Kullanıcı Orta */
-#define PRIORITY_LOW    3   /* Kullanıcı Düşük - Round Robin */
+#define COLOR_BRIGHT_RED     "\033[91m"
+#define COLOR_BRIGHT_GREEN   "\033[92m"
+#define COLOR_BRIGHT_YELLOW  "\033[93m"
+#define COLOR_BRIGHT_BLUE    "\033[94m"
+#define COLOR_BRIGHT_MAGENTA "\033[95m"
+#define COLOR_BRIGHT_CYAN    "\033[96m"
 
 /* Sabitler */
 #define MAX_TASKS       100
-#define TIME_QUANTUM    1       /* 1 saniye */
-#define AUTO_TERMINATE  20      /* 20 saniye sonra otomatik sonlanma */
+#define TIMEOUT_SECONDS 20
 
 /* Görev Durumları */
 typedef enum {
-    TASK_WAITING,       /* Henüz varmadı */
-    TASK_READY,         /* Hazır, kuyrukta bekliyor */
-    TASK_RUNNING,       /* Çalışıyor */
-    TASK_SUSPENDED,     /* Askıya alındı */
-    TASK_FINISHED       /* Tamamlandı */
+    STATE_PENDING,      /* Henüz varmadı */
+    STATE_READY,        /* Kuyrukta bekliyor */
+    STATE_RUNNING,      /* Şu an çalışıyor */
+    STATE_SUSPENDED,    /* Askıya alındı */
+    STATE_FINISHED,     /* Tamamlandı */
+    STATE_TIMEOUT       /* Zamanaşımı */
 } TaskState;
 
 /* Görev Bilgi Yapısı */
@@ -41,10 +41,9 @@ typedef struct TaskInfo {
     int id;
     int arrivalTime;
     int originalPriority;   /* Dosyadan okunan öncelik */
-    int currentPriority;    /* Mevcut öncelik (feedback ile değişebilir) */
-    int burstTime;          /* Toplam gerekli süre */
+    int currentPriority;    /* Feedback ile değişen öncelik */
+    int burstTime;          /* Toplam çalışma süresi */
     int remainingTime;      /* Kalan süre */
-    int executedTime;       /* Toplam çalıştırılan süre (timeout için) */
     TaskState state;
     TaskHandle_t handle;
     const char *color;
@@ -59,28 +58,15 @@ typedef struct {
 } Queue;
 
 /* Global Değişkenler */
-extern Queue rtQueue;       /* Öncelik 0: Gerçek Zamanlı FCFS */
-extern Queue feedbackQ1;    /* Öncelik 1: Yüksek */
-extern Queue feedbackQ2;    /* Öncelik 2: Orta */
-extern Queue feedbackQ3;    /* Öncelik 3: Düşük (Round Robin) */
-
+extern Queue rtQueue;       /* Öncelik 0: Real-Time (FCFS) */
+extern Queue fbQueue1;      /* Öncelik 1 */
+extern Queue fbQueue2;      /* Öncelik 2 */
+extern Queue fbQueue3;      /* Öncelik 3+ (Round-Robin) */
 extern int globalTime;
 
 /* Fonksiyon Prototipleri */
 void SchedulerInit(const char *filename);
 void SchedulerTask(void *pvParameters);
 void WorkerTask(void *pvParameters);
-
-/* Kuyruk İşlemleri */
-void enqueue(Queue *q, TaskInfo *t);
-TaskInfo* dequeue(Queue *q);
-void removeFromQueue(Queue *q, TaskInfo *t);
-void moveToBack(Queue *q, TaskInfo *t);
-
-/* Yardımcı Fonksiyonlar */
-Queue* getQueueByPriority(int priority);
-TaskInfo* getNextTask(void);
-int allQueuesEmpty(void);
-const char* getRandomColor(int id);
 
 #endif
