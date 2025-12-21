@@ -6,9 +6,9 @@
 #include "scheduler.h"
 
 int main(int argc, char *argv[]) {
-    /* Argüman kontrolü */
+    /* Parametre kontrolü */
     if (argc < 2) {
-        printf("Kullanım: ./freertos_sim <giris_dosyasi>\n");
+        printf("Kullanım: ./freertos_sim <görev_dosyası>\n");
         printf("Örnek:    ./freertos_sim giris.txt\n");
         return 1;
     }
@@ -23,11 +23,11 @@ int main(int argc, char *argv[]) {
     /* Scheduler'ı başlat */
     SchedulerInit(argv[1]);
     
-    /* FreeRTOS scheduler'ı çalıştır */
+    /* FreeRTOS scheduler'ı başlat */
     vTaskStartScheduler();
     
     /* Buraya asla ulaşılmamalı */
-    printf("Hata: vTaskStartScheduler geri döndü!\n");
+    printf("Hata: Scheduler beklenmedik şekilde sonlandı!\n");
     
     return 0;
 }

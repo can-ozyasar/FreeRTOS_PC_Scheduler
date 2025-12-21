@@ -4,7 +4,7 @@
 
 #include "scheduler.h"
 
-/* WorkerTask fonksiyon prototipi */
-void WorkerTask(void* pvParameters);
+/* Worker görev fonksiyonu */
+void WorkerTask(void *pvParameters);
 
 #endif

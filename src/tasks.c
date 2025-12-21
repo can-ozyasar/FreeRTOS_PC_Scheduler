@@ -1,16 +1,15 @@
 /* src/tasks.c */
+#include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "scheduler.h"
-#include <stdio.h>
 
-/*******************************************************************************
- * WORKER TASK
+/*
+ * WorkerTask - Her görev için oluşturulan worker
  * 
- * Her görev için oluşturulan genel çalışan görev.
- * Scheduler tarafından yönetilir, kendi başına bir iş yapmaz.
- ******************************************************************************/
-
+ * Bu görev scheduler tarafından yönetilir.
+ * Gerçek iş simülasyonu scheduler içinde yapılır.
+ */
 void WorkerTask(void *pvParameters) {
     TaskInfo *taskInfo = (TaskInfo *)pvParameters;
     
@@ -19,13 +18,13 @@ void WorkerTask(void *pvParameters) {
         return;
     }
     
-    /* Sonsuz döngüde bekle - tüm yönetim Scheduler'da */
+    /* Görev yaşam döngüsü */
     for (;;) {
-        /* Scheduler bu görevi yönetir */
+        /* Scheduler bu görevi askıya alır/devam ettirir */
         vTaskDelay(pdMS_TO_TICKS(100));
         
-        /* Görev bitmiş mi kontrol et */
-        if (taskInfo->state == TASK_STATE_FINISHED) {
+        /* Görev tamamlandıysa çık */
+        if (taskInfo->state == TASK_FINISHED) {
             break;
         }
     }
