@@ -4,15 +4,10 @@
 #include "scheduler.h"
 
 void WorkerTask(void *pvParameters) {
-    TaskInfo *t = (TaskInfo *)pvParameters;
-    
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
-        if (t && (t->state == STATE_FINISHED || t->state == STATE_TIMEOUT)) {
-            break;
-        }
+    // WorkerTask aslında sadece semboliktir. 
+    // İşlemler SchedulerTask içinde simüle edilir.
+    // Bu task sadece var olup uyur.
+    while(1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    
-    vTaskDelete(NULL);
 }

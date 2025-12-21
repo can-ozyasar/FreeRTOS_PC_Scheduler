@@ -4,380 +4,284 @@
 #include <string.h>
 #include "scheduler.h"
 
-/* Global Kuyruklar */
-Queue rtQueue  = {NULL, NULL, 0};
-Queue fbQueue1 = {NULL, NULL, 0};
-Queue fbQueue2 = {NULL, NULL, 0};
-Queue fbQueue3 = {NULL, NULL, 0};
+#define MAX_TASKS 100
+#define TIMEOUT_LIMIT 20
 
-/* Bekleyen görevler listesi */
-TaskInfo *allTasks[MAX_TASKS];
-int totalTasks = 0;
+// Kuyruklar: RT(0), P1, P2, P3
+Queue qRT = {NULL, NULL, 0};
+Queue qP1 = {NULL, NULL, 0};
+Queue qP2 = {NULL, NULL, 0};
+Queue qP3 = {NULL, NULL, 0};
 
-/* Global zaman */
+TaskInfo *pendingTasks[MAX_TASKS]; // Henüz gelmemiş görevler
+int pendingCount = 0;
 int globalTime = 0;
 
-/* Renk havuzu */
-static const char *colors[] = {
-    COLOR_RED, COLOR_GREEN, COLOR_YELLOW, COLOR_BLUE,
-    COLOR_MAGENTA, COLOR_CYAN, COLOR_BRIGHT_RED, COLOR_BRIGHT_GREEN,
-    COLOR_BRIGHT_YELLOW, COLOR_BRIGHT_BLUE, COLOR_BRIGHT_MAGENTA, COLOR_BRIGHT_CYAN
-};
-#define NUM_COLORS 12
+// Renk havuzu
+const char *colors[] = {COLOR_RED, COLOR_GREEN, COLOR_YELLOW, COLOR_BLUE, COLOR_MAGENTA, COLOR_CYAN};
 
-/*****************************************************************************
- * KUYRUK FONKSİYONLARI
- *****************************************************************************/
+/* -------------------- KUYRUK YÖNETİMİ -------------------- */
 
-void enqueue(Queue *q, TaskInfo *t) {
-    if (!q || !t) return;
+void enqueue(Queue* q, TaskInfo* t) {
     t->next = NULL;
-    if (q->tail) {
+    if (q->tail != NULL) {
         q->tail->next = t;
-    } else {
-        q->head = t;
     }
     q->tail = t;
+    if (q->head == NULL) {
+        q->head = t;
+    }
     q->count++;
 }
 
-TaskInfo *dequeue(Queue *q) {
-    if (!q || !q->head) return NULL;
-    TaskInfo *t = q->head;
-    q->head = t->next;
-    if (!q->head) q->tail = NULL;
+TaskInfo* dequeue(Queue* q) {
+    if (q->head == NULL) return NULL;
+    TaskInfo* temp = q->head;
+    q->head = q->head->next;
+    if (q->head == NULL) {
+        q->tail = NULL;
+    }
     q->count--;
-    t->next = NULL;
-    return t;
+    temp->next = NULL;
+    return temp;
 }
 
-void removeFromQueue(Queue *q, TaskInfo *t) {
-    if (!q || !q->head || !t) return;
-    
+// Belirli bir görevi kuyruktan (aradan veya baştan) silmek için
+void remove_task_from_queue(Queue* q, TaskInfo* t) {
+    if (q->head == NULL) return;
+
     if (q->head == t) {
         dequeue(q);
         return;
     }
-    
-    TaskInfo *prev = q->head;
-    while (prev->next && prev->next != t) {
+
+    TaskInfo* prev = q->head;
+    while (prev->next != NULL && prev->next != t) {
         prev = prev->next;
     }
-    
+
     if (prev->next == t) {
         prev->next = t->next;
-        if (q->tail == t) q->tail = prev;
+        if (q->tail == t) {
+            q->tail = prev;
+        }
         q->count--;
         t->next = NULL;
     }
 }
 
-/*****************************************************************************
- * YARDIMCI FONKSİYONLAR
- *****************************************************************************/
+/* -------------------- YARDIMCI FONKSİYONLAR -------------------- */
 
-/* Önceliğe göre kuyruk döndür */
-Queue *getQueue(int priority) {
-    if (priority == 0) return &rtQueue;
-    if (priority == 1) return &fbQueue1;
-    if (priority == 2) return &fbQueue2;
-    return &fbQueue3;  /* 3 ve üzeri hep burada */
+// Öncelik değerine göre (0,1,2,3) doğru kuyruğu döndürür
+Queue* get_queue_by_priority(int p) {
+    switch(p) {
+        case 0: return &qRT;
+        case 1: return &qP1;
+        case 2: return &qP2;
+        default: return &qP3;
+    }
 }
 
-/* En yüksek öncelikli görevi al (kuyruktan çıkarmadan) */
-TaskInfo *peekHighestPriority(void) {
-    if (rtQueue.head)  return rtQueue.head;
-    if (fbQueue1.head) return fbQueue1.head;
-    if (fbQueue2.head) return fbQueue2.head;
-    if (fbQueue3.head) return fbQueue3.head;
+// En yüksek öncelikli kuyruğun başındaki görevi seç (Kuyruktan çıkarmaz, sadece bakar)
+TaskInfo* pick_next_task() {
+    if (qRT.head != NULL) return qRT.head;
+    if (qP1.head != NULL) return qP1.head;
+    if (qP2.head != NULL) return qP2.head;
+    if (qP3.head != NULL) return qP3.head;
     return NULL;
 }
 
-/* Tüm kuyruklar boş mu? */
-int allQueuesEmpty(void) {
-    return (rtQueue.count == 0 && fbQueue1.count == 0 &&
-            fbQueue2.count == 0 && fbQueue3.count == 0);
-}
-
-/* Bekleyen (henüz varmamış) görev var mı? */
-int hasPendingTasks(void) {
-    for (int i = 0; i < totalTasks; i++) {
-        if (allTasks[i] && allTasks[i]->state == STATE_PENDING) {
-            return 1;
-        }
+int has_pending_tasks() {
+    for(int i=0; i<pendingCount; i++) {
+        if(pendingTasks[i] != NULL) return 1;
     }
     return 0;
 }
 
-/* Görevi tüm feedback kuyruklarından çıkar */
-void removeFromAllQueues(TaskInfo *t) {
-    removeFromQueue(&rtQueue, t);
-    removeFromQueue(&fbQueue1, t);
-    removeFromQueue(&fbQueue2, t);
-    removeFromQueue(&fbQueue3, t);
+int all_queues_empty() {
+    return (qRT.count == 0 && qP1.count == 0 && qP2.count == 0 && qP3.count == 0);
 }
 
-/*****************************************************************************
- * ÇIKTI FONKSİYONLARI
- *****************************************************************************/
+/* -------------------- DOSYA OKUMA VE INIT -------------------- */
 
-void printStarted(TaskInfo *t, int time) {
-    printf("%s%d.0000 sn\tproses başladı\t\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
-           t->color, time, t->id, t->currentPriority, t->remainingTime, COLOR_RESET);
-}
-
-void printRunning(TaskInfo *t, int time) {
-    printf("%s%d.0000 sn\tproses yürütülüyor\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
-           t->color, time, t->id, t->currentPriority, t->remainingTime, COLOR_RESET);
-}
-
-void printSuspended(TaskInfo *t, int time) {
-    printf("%s%d.0000 sn\tproses askıda\t\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
-           t->color, time, t->id, t->currentPriority, t->remainingTime, COLOR_RESET);
-}
-
-void printFinished(TaskInfo *t, int time) {
-    printf("%s%d.0000 sn \tproses sonlandı\t \t(id:%04d\töncelik:%d\tkalan süre:0 sn)%s\n",
-           t->color, time, t->id, t->currentPriority, COLOR_RESET);
-}
-
-void printTimeout(TaskInfo *t, int time) {
-    printf("%s%d.0000 sn\tproses zamanaşımı\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
-           t->color, time, t->id, t->currentPriority, t->remainingTime, COLOR_RESET);
-}
-
-/*****************************************************************************
- * TIMEOUT KONTROLÜ
- * Varış zamanından itibaren 20 saniye geçen görevleri sonlandır
- *****************************************************************************/
-
-void checkTimeouts(int currentTime) {
-    /* Sadece kullanıcı kuyruklarını kontrol et (RT değil) */
-    Queue *queues[] = {&fbQueue1, &fbQueue2, &fbQueue3};
-    
-    for (int q = 0; q < 3; q++) {
-        TaskInfo *t = queues[q]->head;
-        while (t) {
-            TaskInfo *next = t->next;
-            
-            /* Varış zamanından itibaren 20 saniyeden fazla geçti mi? */
-            if ((currentTime - t->arrivalTime) > TIMEOUT_SECONDS) {
-                printTimeout(t, currentTime);
-                t->state = STATE_TIMEOUT;
-                removeFromQueue(queues[q], t);
-                
-                if (t->handle) {
-                    vTaskDelete(t->handle);
-                    t->handle = NULL;
-                }
-            }
-            t = next;
-        }
-    }
-}
-
-/*****************************************************************************
- * SCHEDULER BAŞLATMA
- *****************************************************************************/
-
-void SchedulerInit(const char *filename) {
-    FILE *file = fopen(filename, "r");
+void SchedulerInit(const char* filename) {
+    FILE* file = fopen(filename, "r");
     if (!file) {
-        perror("Dosya açılamadı");
+        printf("Hata: Dosya acilamadi!\n");
         exit(1);
     }
-    
+
     char line[256];
     int arrival, priority, burst;
-    
+    int colorIdx = 0;
+
+    // Dosyadan okuma formatı: arrival, priority, burst
     while (fgets(line, sizeof(line), file)) {
-        if (line[0] == '\n' || line[0] == '#') continue;
-        
+        // Satırdaki boşlukları tolere etmek için format string
         if (sscanf(line, "%d, %d, %d", &arrival, &priority, &burst) == 3) {
-            TaskInfo *t = (TaskInfo *)malloc(sizeof(TaskInfo));
-            t->id = totalTasks;
+            TaskInfo* t = (TaskInfo*)malloc(sizeof(TaskInfo));
+            t->id = pendingCount; // ID 0'dan başlar
             t->arrivalTime = arrival;
-            t->originalPriority = priority;
-            t->currentPriority = priority;
+            t->priority = priority;
             t->burstTime = burst;
             t->remainingTime = burst;
-            t->state = STATE_PENDING;
-            t->handle = NULL;
-            t->color = colors[totalTasks % NUM_COLORS];
+            t->isFinished = 0;
+            t->hasStarted = 0;
             t->next = NULL;
-            
-            /* Worker task oluştur */
-            char name[16];
-            snprintf(name, sizeof(name), "T%d", totalTasks);
-            xTaskCreate(WorkerTask, name, configMINIMAL_STACK_SIZE, t, 1, &t->handle);
-            if (t->handle) vTaskSuspend(t->handle);
-            
-            allTasks[totalTasks++] = t;
+            t->color = colors[colorIdx % 6];
+            colorIdx++;
+
+            // WorkerTask oluştur ama hemen çalıştırma (Scheduler yönetecek)
+            xTaskCreate(WorkerTask, "Worker", configMINIMAL_STACK_SIZE, t, 1, &t->handle);
+            // vTaskSuspend(t->handle); // İsteğe bağlı, zaten WorkerTask delay ile bekliyor
+
+            pendingTasks[pendingCount++] = t;
         }
     }
     fclose(file);
-    
-    /* Scheduler task */
-    xTaskCreate(SchedulerTask, "Sched", configMINIMAL_STACK_SIZE * 4, NULL,
-                configMAX_PRIORITIES - 1, NULL);
+
+    // Scheduler görevini oluştur
+    xTaskCreate(SchedulerTask, "Scheduler", configMINIMAL_STACK_SIZE * 2, NULL, configMAX_PRIORITIES - 1, NULL);
 }
 
-/*****************************************************************************
- * ANA ZAMANLAYICI
- *****************************************************************************/
+/* -------------------- ZAMAN AŞIMI KONTROLÜ -------------------- */
+void check_timeouts() {
+    Queue* queues[] = {&qP1, &qP2, &qP3}; // Sadece kullanıcı kuyruklarında timeout olur mu? Raporda genel konuşmuş ama genelde RT timeout yemez. Biz hepsine bakalım güvenli olsun diye ancak genelde User Queue bakılır.
+    // Rapora göre: "Görevlendirici tarafından sonlandırılmazsa, görev 20 saniye sonra kendiliğinden sona erecektir."
+    // Bu yüzden tüm kuyruklara bakmak en doğrusu.
+
+    Queue* allQueues[] = {&qRT, &qP1, &qP2, &qP3};
+
+    for(int i=0; i<4; i++) {
+        Queue* q = allQueues[i];
+        TaskInfo* curr = q->head;
+        TaskInfo* nextNode;
+
+        while(curr != NULL) {
+            nextNode = curr->next; // Silinme ihtimaline karşı yedeği al
+            
+            // Varış zamanından itibaren 20 sn geçti mi?
+            if ((globalTime - curr->arrivalTime) >= TIMEOUT_LIMIT) {
+                printf("%s%d.0000 sn\tproses zamanaşımı\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
+                       curr->color, globalTime, curr->id, curr->priority, curr->remainingTime, COLOR_RESET);
+                
+                curr->isFinished = 1;
+                remove_task_from_queue(q, curr);
+                vTaskDelete(curr->handle);
+                free(curr);
+            }
+            curr = nextNode;
+        }
+    }
+}
+
+/* -------------------- SCHEDULER TASK (ANA DÖNGÜ) -------------------- */
 
 void SchedulerTask(void *pvParameters) {
-    (void)pvParameters;
-    
-    TaskInfo *running = NULL;
-    int justStarted = 0;  /* Bu tick'te yeni mi başladı? */
-    
+    TaskInfo* runningTask = NULL;
+
     for (;;) {
-        /********************************************************************
-         * 1. YENİ VARAN GÖREVLERİ KUYRUĞA EKLE
-         ********************************************************************/
-        for (int i = 0; i < totalTasks; i++) {
-            TaskInfo *t = allTasks[i];
-            if (t && t->state == STATE_PENDING && t->arrivalTime == globalTime) {
-                t->state = STATE_READY;
-                Queue *q = getQueue(t->currentPriority);
-                enqueue(q, t);
+        // 1. ADIM: Yeni Gelenleri Kuyruğa Al
+        for (int i = 0; i < pendingCount; i++) {
+            if (pendingTasks[i] != NULL && pendingTasks[i]->arrivalTime == globalTime) {
+                Queue* targetQ = get_queue_by_priority(pendingTasks[i]->priority);
+                enqueue(targetQ, pendingTasks[i]);
+                pendingTasks[i] = NULL; // Listeden çıkar
             }
         }
-        
-        /********************************************************************
-         * 2. RT PREEMPTION KONTROLÜ
-         * Eğer kullanıcı görevi çalışıyorsa ve RT kuyruğunda görev varsa
-         ********************************************************************/
-        if (running && running->state == STATE_RUNNING && 
-            running->currentPriority > 0 && rtQueue.count > 0) {
-            
-            /* Kullanıcı görevini askıya al */
-            running->currentPriority++;  /* Öncelik düşür */
-            running->state = STATE_SUSPENDED;
-            printSuspended(running, globalTime);
-            
-            /* Uygun kuyruğa ekle */
-            Queue *q = getQueue(running->currentPriority);
-            enqueue(q, running);
-            
-            running = NULL;
+
+        // 2. ADIM: Timeout Kontrolü
+        check_timeouts();
+
+        // 3. ADIM: Çalışacak Görevi Seç (Preemptive Kontrol)
+        TaskInfo* nextTask = pick_next_task();
+
+        // Eğer şu an çalışan bir RT görevi varsa ve bitmediyse, onu kesemeyiz (RT FCFS).
+        // Ancak daha yüksek öncelikli bir RT geldiyse? Raporda RT'ler FCFS der, yani ilk gelen bitene kadar çalışır.
+        // O yüzden RT çalışıyorsa değiştirmeyiz.
+        if (runningTask != NULL && runningTask->priority == 0 && runningTask->remainingTime > 0) {
+            // RT görevi çalışmaya devam eder
+            nextTask = runningTask; 
         }
-        
-        /********************************************************************
-         * 3. ÇALIŞTIRILACAK GÖREVİ SEÇ
-         ********************************************************************/
-        if (!running) {
-            TaskInfo *next = peekHighestPriority();
+
+        // Eğer bir değişim varsa (Context Switch)
+        if (runningTask != NULL && runningTask != nextTask && runningTask->remainingTime > 0) {
+            // Eski görev askıya alındı
+             printf("%s%d.0000 sn\tproses askıda\t\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
+                       runningTask->color, globalTime, runningTask->id, runningTask->priority, runningTask->remainingTime, COLOR_RESET);
             
-            if (next) {
-                Queue *q = getQueue(next->currentPriority);
-                dequeue(q);
-                
-                running = next;
-                running->state = STATE_RUNNING;
-                justStarted = 1;
-                
-                /* Başladı mesajı */
-                printStarted(running, globalTime);
-            }
+             // Eski görevi kuyruğun uygun yerine taşıyacağız (Feedback mantığı aşağıda 5. adımda yapılıyor, 
+             // ancak burada preemption olduysa, round robin mantığı veya feedback mantığı devreye girmeliydi.
+             // Biz basitlik adına simülasyonu 1 saniyelik bloklar halinde düşündüğümüz için,
+             // görev değişikliğini sadece "seçilen nextTask farklıysa" anlıyoruz.)
         }
-        
-        /********************************************************************
-         * 4. GÖREVI ÇALIŞTIR (1 KUANTUM)
-         ********************************************************************/
-        if (running && running->state == STATE_RUNNING) {
-            
-            /* Eğer bu tick'te yeni başlamadıysa, yürütülüyor yazdır */
-            if (!justStarted) {
-                printRunning(running, globalTime);
+
+        // Çalışacak görev yok mu?
+        if (nextTask == NULL) {
+            if (!has_pending_tasks() && all_queues_empty()) {
+                printf("Tum gorevler tamamlandi. Simulasyon bitti.\n");
+                exit(0);
             }
-            justStarted = 0;
-            
-            /* 1 birim çalıştır */
-            running->remainingTime--;
-            
-            /* Zaman ilerle (mesajlar için) */
             globalTime++;
-            
-            /****************************************************************
-             * 5. GÖREV BİTTİ Mİ?
-             ****************************************************************/
-            if (running->remainingTime == 0) {
-                printFinished(running, globalTime);
-                running->state = STATE_FINISHED;
-                
-                if (running->handle) {
-                    vTaskDelete(running->handle);
-                    running->handle = NULL;
-                }
-                running = NULL;
-                
-                /* Timeout kontrolü */
-                checkTimeouts(globalTime);
-                
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                continue;
-            }
-            
-            /****************************************************************
-             * 6. RT GÖREVİ İSE KESİNTİSİZ DEVAM ET
-             ****************************************************************/
-            if (running->currentPriority == 0) {
-                /* RT görevi, kesintisiz devam */
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                continue;
-            }
-            
-            /****************************************************************
-             * 7. KULLANICI GÖREVİ - QUANTUM BİTTİ
-             * Feedback ve Round-Robin mantığı
-             ****************************************************************/
-            
-            /* Daha yüksek öncelikli görev var mı? */
-            int shouldPreempt = 0;
-            
-            if (running->currentPriority >= 1 && rtQueue.count > 0) shouldPreempt = 1;
-            if (running->currentPriority >= 2 && fbQueue1.count > 0) shouldPreempt = 1;
-            if (running->currentPriority >= 3 && fbQueue2.count > 0) shouldPreempt = 1;
-            
-            /* Aynı seviyede başka görev var mı? (Round-Robin) */
-            Queue *myQueue = getQueue(running->currentPriority);
-            if (myQueue->count > 0) shouldPreempt = 1;
-            
-            if (shouldPreempt) {
-                /* Önceliği düşür */
-                running->currentPriority++;
-                running->state = STATE_SUSPENDED;
-                
-                printSuspended(running, globalTime);
-                
-                /* Yeni kuyruğa ekle */
-                Queue *newQ = getQueue(running->currentPriority);
-                enqueue(newQ, running);
-                
-                running = NULL;
-            }
-            /* else: Tek başına, devam edecek */
-            
-            /* Timeout kontrolü */
-            checkTimeouts(globalTime);
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
         }
+
+        // 4. ADIM: Görevi Yürüt
+        runningTask = nextTask;
+        
+        // Başlangıç/Devam mesajı
+        if (runningTask->hasStarted == 0) {
+             printf("%s%d.0000 sn\tproses başladı\t\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
+                       runningTask->color, globalTime, runningTask->id, runningTask->priority, runningTask->remainingTime, COLOR_RESET);
+            runningTask->hasStarted = 1;
+        } else {
+             printf("%s%d.0000 sn\tproses yürütülüyor\t(id:%04d\töncelik:%d\tkalan süre:%d sn)%s\n",
+                       runningTask->color, globalTime, runningTask->id, runningTask->priority, runningTask->remainingTime, COLOR_RESET);
+        }
+
+        // Simülasyon: 1 saniye bekle
+        runningTask->remainingTime--;
+        globalTime++;
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1 Saniye gerçek zamanlı gecikme
+
+        // 5. ADIM: Görev Durumu Güncelleme (Feedback & Termination)
+        
+        if (runningTask->remainingTime <= 0) {
+            // Görev Bitti
+             printf("%s%d.0000 sn\tproses sonlandı\t\t(id:%04d\töncelik:%d\tkalan süre:0 sn)%s\n",
+                       runningTask->color, globalTime, runningTask->id, runningTask->priority, COLOR_RESET);
+            
+            runningTask->isFinished = 1;
+            // Kuyruktan çıkar
+            Queue* q = get_queue_by_priority(runningTask->priority);
+            remove_task_from_queue(q, runningTask);
+            vTaskDelete(runningTask->handle);
+            free(runningTask);
+            runningTask = NULL; // Görev yok edildi
+        } 
         else {
-            /* Çalışan görev yok */
-            globalTime++;
-            checkTimeouts(globalTime);
+            // Görev Bitmedi. Feedback Algoritması Uygula
+            
+            if (runningTask->priority == 0) {
+                // RT Görevi: Öncelik değişmez, kuyruğun başında kalır (FCFS).
+                // Bir şey yapmaya gerek yok.
+            } 
+            else {
+                // User Görevi (1, 2, 3)
+                // Mevcut kuyruktan çıkar
+                Queue* oldQ = get_queue_by_priority(runningTask->priority);
+                dequeue(oldQ); // Head'den çıkar (zaten runningTask head'deydi)
+
+                // Önceliği Düşür (Değerini artır), Max 3
+                if (runningTask->priority < 3) {
+                    runningTask->priority++;
+                }
+                
+                // Yeni (veya aynı) kuyruğun SONUNA ekle (Round Robin etkisi)
+                Queue* newQ = get_queue_by_priority(runningTask->priority);
+                enqueue(newQ, runningTask);
+            }
         }
-        
-        /********************************************************************
-         * 8. SİMÜLASYON BİTTİ Mİ?
-         ********************************************************************/
-        if (!running && allQueuesEmpty() && !hasPendingTasks()) {
-            printf("\nSimülasyon tamamlandı. Toplam süre: %d sn\n", globalTime);
-            vTaskDelay(pdMS_TO_TICKS(100));
-            exit(0);
-        }
-        
-        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
