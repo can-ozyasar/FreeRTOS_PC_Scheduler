@@ -2,11 +2,24 @@
 
 FreeRTOS zamanlayıcı mantığını PC ortamında incelemek için C/Makefile tabanlı çalışma.
 
-## Öne Çıkanlar
+## Bu Repo Ne İçin Var?
+FreeRTOS zamanlayıcı davranışını ve görev mantığını PC ortamında gözlemlemek için oluşturuldu.
+
+Bu README'nin amacı; repoya ilk kez gelen birinin projenin neden açıldığını, içinde ne bulunduğunu ve nereden başlaması gerektiğini hızlıca anlamasını sağlamaktır.
+
+## İçerik ve Kapsam
+Bu repoda öne çıkan içerikler şunlardır:
 - Makefile ile derlenebilir proje
 - Zamanlayıcı ve görev yönetimi deneyleri
 - Gömülü sistem kavramlarını masaüstünde test etme amacı
-- Kullanılan ana teknolojiler: C, Make
+- Makefile ile derleme/çalıştırma akışı
+
+## Kimler İçin Faydalı?
+C/C++ veya sistem programlama konularını uygulama üzerinden görmek isteyenler için uygundur.
+
+## Kullanılan Teknolojiler
+- C
+- Make
 
 ## Kurulum
 ```bash
@@ -29,7 +42,6 @@ make run
 - `cikti.txt` - 1 dosya
 - `freertos_sim` - 1 dosya
 - `giris.txt` - 1 dosya
-- `readme.md` - 1 dosya
 
 ## Geliştirme Notları
 - README içeriği, repodaki mevcut dosya yapısı ve proje açıklamasına göre düzenlenmiştir.
